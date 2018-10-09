@@ -40,12 +40,13 @@ set-Location 'C:\PostgreSQL\9.6\bin\';
 $env:PGPASSWORD = 'check_mk';
 $U="check_mk"
 $DB="postgres"
+$PORT="5432"
 
-$DATABASES = .\psql.exe -U $U -A -t -w -d postgres -c "SELECT datname FROM pg_database WHERE datistemplate = false;"
+$DATABASES = .\psql.exe -U $U -p $PORT -A -t -w -d postgres -c "SELECT datname FROM pg_database WHERE datistemplate = false;"
 
 Echo "<<<postgres_sessions>>>"
-$QNAME = & .\psql.exe -U $U -A -t -w -d ${DB} -c "select column_name from information_schema.columns where table_name='pg_stat_activity' and column_name in ('query','current_query');"
-$OUTPUT = & .\psql.exe -U $U -A -t -w -d ${DB} -F" " -c "select $QNAME = '<IDLE>', count(*) from pg_stat_activity group by ($QNAME = '<IDLE>');"
+$QNAME = & .\psql.exe -U $U -p $PORT -A -t -w -d ${DB} -c "select column_name from information_schema.columns where table_name='pg_stat_activity' and column_name in ('query','current_query');"
+$OUTPUT = & .\psql.exe -U $U -p $PORT -A -t -w -d ${DB} -F" " -c "select $QNAME = '<IDLE>', count(*) from pg_stat_activity group by ($QNAME = '<IDLE>');"
 $OUTPUT = $OUTPUT -replace '[|]'
 Echo $OUTPUT
 Echo "t 0"
@@ -55,7 +56,7 @@ Echo "<<<postgres_stat_database:sep(59)>>>"
 $statsquery = "select datid, datname, numbackends, xact_commit, xact_rollback, blks_read, blks_hit, tup_returned, tup_fetched, tup_inserted, tup_updated, tup_deleted, pg_database_size(datname) as datsize 
 from pg_stat_database;"
 
-$stats = & .\psql.exe -U $U -A -F';' -d $DB -c $statsquery
+$stats = & .\psql.exe -U $U -p $PORT -A -F';' -d $DB -c $statsquery
 echo $stats | foreach {$i=$null} {$i;$i=$_}
  
 #Echo $stats
@@ -67,7 +68,7 @@ Echo $X
 }
 Echo "[databases_end]"
 
-$LOCKS = & .\psql.exe -U $U -A -F';' -X -d ${DB} -c "SELECT datname, granted, mode FROM pg_locks l RIGHT JOIN pg_database d ON (d.oid=l.database) WHERE d.datallowconn;"
+$LOCKS = & .\psql.exe -U $U -p $PORT -A -F';' -X -d ${DB} -c "SELECT datname, granted, mode FROM pg_locks l RIGHT JOIN pg_database d ON (d.oid=l.database) WHERE d.datallowconn;"
 Echo "$LOCKS" | foreach {$i=$null} {$i;$i=$_}
 
 # Querytime
@@ -78,7 +79,7 @@ Echo $X
 }
 Echo "[databases_end]"
 
-$QUERYTIME_QUERY = & .\psql.exe -U $U -X -A -F';' -d ${DB}  -c "SELECT datname, datid, usename, client_addr, state AS state, COALESCE(ROUND(EXTRACT(epoch FROM now()-query_start)),0) AS seconds,
+$QUERYTIME_QUERY = & .\psql.exe -U $U -p $PORT -X -A -F';' -d ${DB}  -c "SELECT datname, datid, usename, client_addr, state AS state, COALESCE(ROUND(EXTRACT(epoch FROM now()-query_start)),0) AS seconds,
  pid, regexp_replace(query, E'[\\n\\r\\u2028]+', ' ', 'g' ) AS current_query FROM pg_stat_activity WHERE (query_start IS NOT NULL AND (state NOT LIKE 'idle%' OR state IS NULL)) ORDER BY query_start, pid DESC;"
 Echo $QUERYTIME_QUERY | foreach {$i=$null} {$i;$i=$_}
  
@@ -90,7 +91,7 @@ Echo $X
 }
 Echo "[databases_end]"
 foreach ($X in $DATABASES){
-    $LASTVACUUM = & .\psql.exe -U $U -X -d ${X} -A -F';' -c "BEGIN;
+    $LASTVACUUM = & .\psql.exe -U $U -p $PORT -X -d ${X} -A -F';' -c "BEGIN;
     SET statement_timeout=30000;
     COMMIT;
     SELECT current_database() AS datname, nspname AS sname, relname AS tname,
@@ -108,7 +109,7 @@ foreach ($X in $DATABASES){
 }
     
 Echo '<<<postgres_version:sep(1)>>>'
-$vers = .\psql.exe -U $U -d ${DB} -X -t -A -F';' -c "SELECT version() AS v"
+$vers = .\psql.exe -U $U -p $PORT -d ${DB} -X -t -A -F';' -c "SELECT version() AS v"
 Echo $vers
 
 
@@ -122,7 +123,7 @@ Echo $X
 }
 Echo "[databases_end]"
 
-$CONNECTIONS = & .\psql.exe -U $U -X -d ${DB} -A -F';' -c "SELECT COUNT(datid) AS current,
+$CONNECTIONS = & .\psql.exe -U $U -p $PORT -X -d ${DB} -A -F';' -c "SELECT COUNT(datid) AS current,
   (SELECT setting AS mc FROM pg_settings WHERE name = 'max_connections') AS mc,
   d.datname
 FROM pg_database d
@@ -211,7 +212,7 @@ $BLOAT_QUERY="SELECT current_database() AS db, schemaname, tablename, reltuples:
 
   foreach ($X in $DATABASES){
  
-     $RESPONSE = &.\psql.exe -U $U -X -d ${X} -A -F';' -c $BLOAT_QUERY 
+     $RESPONSE = &.\psql.exe -U $U -p $PORT -X -d ${X} -A -F';' -c $BLOAT_QUERY 
      
      Echo $RESPONSE | foreach {$i=$null} {$i;$i=$_}
  }
